@@ -96,16 +96,6 @@
     (mapv #(maybe-qualify % table)
           columns)))
 
-(defn- column-keys
-  "Normalize the keys of a row map -- an `insert!` row, or the `changes` map of an `update!` -- to symbols.
-
-  A row map is data: a map of column to value, and its keys are whatever the caller's rows happen to use (usually
-  keywords, since that is how rows come back from the database, and what `before-insert`/`before-update` methods see).
-  Turning those keys into the column names of a `values`/`set` clause is Toucan 2 generating identifiers, so like
-  [[toucan2.model/table-name]] they come out as symbols."
-  [row]
-  (into {} (map (fn [[k v]] [(if (keyword? k) (symbol (namespace k) (name k)) k) v])) row))
-
 (defn- has-clause?
   "Whether `honeysql-query` has clause `sym`. Honey SQL accepts a clause spelled either way, so we look for both."
   [honeysql-query sym]
@@ -203,7 +193,7 @@
         built-query (-> (merge {'insert-into [(model/table-name model)]}
                                (if (= rows [{}])
                                  (empty-insert model (:dialect (options)))
-                                 {'values (map (comp column-keys (partial instance/instance model))
+                                 {'values (map (partial instance/instance model)
                                                rows)}))
                         (with-meta (meta resolved-query)))]
     (log/debugf "=> %s" built-query)
@@ -218,7 +208,7 @@
   (log/debugf "Building UPDATE query for %s" model)
   (let [parsed-args (assoc parsed-args :kv-args (merge kv-args conditions-map))
         built-query (-> {'update (table-and-alias model)
-                         'set    (column-keys changes)}
+                         'set    changes}
                         (with-meta (meta conditions-map)))]
     (log/debugf "=> %s" built-query)
     ;; `:changes` are added to `parsed-args` so we can get the no-op behavior in the default method.
