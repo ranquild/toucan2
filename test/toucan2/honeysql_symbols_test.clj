@@ -61,9 +61,14 @@
 
 (deftest ^:parallel insert-update-delete-test
   (is (= '{insert-into [venues], values [{name "x"}]}
-         (update (compile/build (t2/insert! ::venues {'name "x"})) 'values #(mapv (partial into {}) %))))
+         (update (compile/build (t2/insert! ::venues {'name "x"})) 'values vec)))
   (is (= '{update [venues], set {name "x"}, where [= id 1]}
          (compile/build (t2/update! ::venues 1 {'name "x"}))))
+  (testing "row maps are data, so keyword keys are normalized to column symbols rather than rejected"
+    (is (= '{insert-into [venues], values [{name "x"}]}
+           (update (compile/build (t2/insert! ::venues {:name "x"})) 'values vec)))
+    (is (= '{update [venues], set {name "x"}, where [= id 1]}
+           (compile/build (t2/update! ::venues 1 {:name "x"})))))
   (is (= '{delete-from [venues], where [= id 1]}
          (compile/build (t2/delete! ::venues 'id 1)))))
 
