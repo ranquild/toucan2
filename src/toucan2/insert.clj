@@ -11,7 +11,7 @@
 
 (s/def ::kv-args
   (s/+ (s/cat
-        :k keyword?
+        :k ident?
         :v any?)))
 
 (s/def ::args.rows
@@ -19,7 +19,7 @@
          :single-row-map    map?
          :multiple-row-maps (s/spec (s/* map?))
          :kv-pairs          ::kv-args
-         :columns-rows      (s/cat :columns (s/spec (s/+ keyword?))
+         :columns-rows      (s/cat :columns (s/spec (s/+ ident?))
                                    :rows    (s/spec (s/+ sequential?)))))
 
 (s/def ::args

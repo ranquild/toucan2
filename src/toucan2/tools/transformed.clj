@@ -20,7 +20,7 @@
             ifn?))
 
 (s/def ::transforms-map.column->direction
-  (s/map-of keyword?
+  (s/map-of ident?
             ::transforms-map.direction->fn))
 
 (defn- validate-transforms-map [transforms-map]
@@ -119,7 +119,11 @@
        model
        (into {} (for [[k direction->xform] k->direction->transform
                       :let                 [xform (get direction->xform direction)]
-                      :when                xform]
+                      :when                xform
+                      ;; a column can be written as a keyword or as a symbol, and Toucan 2 never converts one to the
+                      ;; other, so register the transform under both spellings and let lookup find it either way.
+                      k                    [(keyword (namespace k) (name k))
+                                            (symbol (namespace k) (name k))]]
                   [k (fn xform-fn [v]
                        (if-not (some? v)
                          v

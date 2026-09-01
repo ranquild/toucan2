@@ -30,25 +30,31 @@
 
 (defn- fn-condition->honeysql-where-clause
   [k [f & args]]
-  {:pre [(keyword? f) (seq args)]}
+  {:pre [(ident? f) (seq args)]}
   (into [f k] args))
 
 (defn condition->honeysql-where-clause
-  "Something sequential like `:id [:> 5]` becomes `[:> :id 5]`. Other stuff like `:id 5` just becomes `[:= :id 5]`."
+  "Something sequential like `'id ['> 5]` becomes `['> 'id 5]`. Other stuff like `'id 5` just becomes `['= 'id 5]`."
   [k v]
   ;; don't think there's any situation where `nil` on the LHS is on purpose and not a bug.
   {:pre [(some? k)]}
   (if (sequential? v)
     (fn-condition->honeysql-where-clause k v)
-    [:= k v]))
+    ['= k v]))
+
+(defn- merge-where-clause
+  "Combine `clause` with whatever is already in the `where` position, the same way [[honey.sql.helpers/where]] would."
+  [existing-where clause]
+  (cond
+    (not (seq existing-where))       clause
+    (= (first existing-where) 'and)  (conj (vec existing-where) clause)
+    :else                            ['and existing-where clause]))
 
 (m/defmethod query/apply-kv-arg [#_model :default #_query clojure.lang.IPersistentMap #_k :default]
   "Apply key-value args to a Honey SQL 2 query map."
   [_model honeysql k v]
   (log/debugf "apply kv-arg %s %s" k v)
-  (let [result (update honeysql :where (fn [existing-where]
-                                         (:where (hsql.helpers/where existing-where
-                                                                     (condition->honeysql-where-clause k v)))))]
+  (let [result (update honeysql 'where merge-where-clause (condition->honeysql-where-clause k v))]
     (log/tracef "=> %s" result)
     result))
 
@@ -57,10 +63,8 @@
   use in something like a `:select` clause."
   [model]
   (b/cond
-    :let [table-id (keyword (model/table-name model))
-          alias-id (model/namespace model)
-          alias-id (when alias-id
-                     (keyword alias-id))]
+    :let [table-id (model/table-name model)
+          alias-id (model/namespace model)]
     alias-id
     [table-id alias-id]
 
@@ -82,32 +86,34 @@
 
 (defn- maybe-qualify [column table]
   (cond
-    (not (keyword? column)) column
-    (qualified? column)     column
-    :else                   (keyword (name table) (name column))))
+    (not (ident? column)) column
+    (qualified? column)   column
+    :else                 (symbol (name table) (name column))))
 
 (defn- maybe-qualify-columns [columns [table-id alias-id]]
   (let [table (or alias-id table-id)]
-    (assert (keyword? table))
+    (assert (ident? table))
     (mapv #(maybe-qualify % table)
           columns)))
 
+(defn- has-clause?
+  "Whether `honeysql-query` has clause `sym`. Honey SQL accepts a clause spelled either way, so we look for both."
+  [honeysql-query sym]
+  (or (contains? honeysql-query sym)
+      (contains? honeysql-query (keyword sym))))
+
 (defn include-default-select?
-  "Should we splice in the default `:select` clause for this `honeysql-query`? Only splice in the default `:select` if we
-  don't have `:union`, `:union-all`, or `:select-distinct` in the resolved query."
+  "Should we splice in the default `select` clause for this `honeysql-query`? Only splice in the default `select` if we
+  don't have `union`, `union-all`, or `select-distinct` in the resolved query."
   [honeysql-query]
-  (every? (fn [k]
-            (not (contains? honeysql-query k)))
-          [:union :union-all :select :select-distinct]))
+  (not-any? (partial has-clause? honeysql-query) '[union union-all select select-distinct]))
 
 (defn- include-default-from?
-  "Should we splice in the default `:from` clause for this `honeysql-query`? Only splice in the default `:from` if we
-  don't have `:union` or `:union-all` in the resolved query. It doesn't make sense to do a `x UNION y` query and then
+  "Should we splice in the default `from` clause for this `honeysql-query`? Only splice in the default `from` if we
+  don't have `union` or `union-all` in the resolved query. It doesn't make sense to do a `x UNION y` query and then
   include `FROM` as well."
   [honeysql-query]
-  (every? (fn [k]
-            (not (contains? honeysql-query k)))
-          [:union :union-all]))
+  (not-any? (partial has-clause? honeysql-query) '[union union-all]))
 
 (m/defmethod pipeline/build [#_query-type     :default
                              #_model          :default
@@ -128,11 +134,11 @@
         table+alias    (table-and-alias model)
         resolved-query (-> (merge
                             (when (include-default-select? resolved-query)
-                              {:select (or (some-> (not-empty columns) (maybe-qualify-columns table+alias))
-                                           [:*])})
+                              {'select (or (some-> (not-empty columns) (maybe-qualify-columns table+alias))
+                                           ['*])})
                             (when (and model
                                        (include-default-from? resolved-query))
-                              {:from [table+alias]})
+                              {'from [table+alias]})
                             resolved-query)
                            (with-meta (meta resolved-query)))]
     (log/debugf "=> %s" resolved-query)
@@ -143,7 +149,7 @@
                              #_query      clojure.lang.IPersistentMap]
   "Build an efficient `count(*)` query to power [[toucan2.select/count]]."
   [query-type model parsed-args resolved-query]
-  (let [parsed-args (assoc parsed-args :columns [[:%count.* :count]])]
+  (let [parsed-args (assoc parsed-args :columns '[[%count.* count]])]
     (next-method query-type model parsed-args resolved-query)))
 
 (m/defmethod pipeline/build [#_query-type :toucan.query-type/select.exists
@@ -151,15 +157,15 @@
                              #_query      clojure.lang.IPersistentMap]
   "Build an efficient query like `SELECT exists(SELECT 1 FROM ...)` query to power [[toucan2.select/exists?]]."
   [query-type model parsed-args resolved-query]
-  (let [parsed-args (assoc parsed-args :columns [[[:inline 1]]])
+  (let [parsed-args (assoc parsed-args :columns '[[[inline 1]]])
         subselect   (next-method query-type model parsed-args resolved-query)]
-    {:select [[[:exists subselect] :exists]]}))
+    {'select [[['exists subselect] 'exists]]}))
 
 (defn- empty-insert [_model dialect]
   (if (#{:mysql :mariadb} dialect)
-    {:columns []
-     :values  [[]]}
-    {:values :default}))
+    {'columns []
+     'values  [[]]}
+    {'values 'default}))
 
 (m/defmethod pipeline/build [#_query-type :toucan.query-type/insert.*
                              #_model      :default
@@ -184,10 +190,10 @@
   [query-type model parsed-args resolved-query]
   (log/debugf "Building INSERT query for %s" model)
   (let [rows        (some (comp not-empty :rows) [parsed-args resolved-query])
-        built-query (-> (merge {:insert-into [(keyword (model/table-name model))]}
+        built-query (-> (merge {'insert-into [(model/table-name model)]}
                                (if (= rows [{}])
                                  (empty-insert model (:dialect (options)))
-                                 {:values (map (partial instance/instance model)
+                                 {'values (map (partial instance/instance model)
                                                rows)}))
                         (with-meta (meta resolved-query)))]
     (log/debugf "=> %s" built-query)
@@ -201,8 +207,8 @@
   [query-type model {:keys [kv-args changes], :as parsed-args} conditions-map]
   (log/debugf "Building UPDATE query for %s" model)
   (let [parsed-args (assoc parsed-args :kv-args (merge kv-args conditions-map))
-        built-query (-> {:update (table-and-alias model)
-                         :set    changes}
+        built-query (-> {'update (table-and-alias model)
+                         'set    changes}
                         (with-meta (meta conditions-map)))]
     (log/debugf "=> %s" built-query)
     ;; `:changes` are added to `parsed-args` so we can get the no-op behavior in the default method.
@@ -228,12 +234,12 @@
   build method below)."
   [table+alias dialect]
   (if (= (count table+alias) 1)
-    {:delete-from table+alias}
+    {'delete-from table+alias}
     (let [[_table table-alias] table+alias]
       (if (#{:mysql :mariadb} dialect)
-        {:delete table-alias
-         :from   [table+alias]}
-        {:delete-from table+alias}))))
+        {'delete table-alias
+         'from   [table+alias]}
+        {'delete-from table+alias}))))
 
 (m/defmethod pipeline/build [#_query-type :toucan.query-type/delete.*
                              #_model      :default
@@ -281,7 +287,7 @@
   [form]
   (when (and (vector? form) (= 3 (count form)))
     (let [[op _ coll] form]
-      (and (= :in op)
+      (and (or (= 'in op) (= :in op))
            (seqable? coll)
            (empty? coll)
            (not (map? coll))))))

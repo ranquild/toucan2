@@ -16,9 +16,9 @@
               :connectable any?)))
 
 (s/def ::default-args.modelable.column
-  (s/or :column      keyword?
+  (s/or :column      ident?
         :expr-column (s/cat :expr   any?
-                            :column (s/? keyword?))))
+                            :column (s/? ident?))))
 
 (s/def ::default-args.modelable.columns
   (s/* (s/nonconforming ::default-args.modelable.column)))
@@ -174,7 +174,7 @@
    :dispatch-value-spec (types/or-default-spec
                          (s/cat :model          ::types/dispatch-value.model
                                 :resolved-query ::types/dispatch-value.query
-                                :k              keyword?))}
+                                :k              ident?))}
   u/dispatch-on-first-three-args)
 
 (comment
@@ -214,23 +214,29 @@
 
 (defn- toucan-pk-composite-values [pk-columns tuple]
   {:pre [(sequential? tuple)], :post [(sequential? %) (every? map? %) (every? :col %)]}
-  (if (keyword? (first tuple))
+  (if (ident? (first tuple))
     (toucan-pk-fn-values pk-columns (first tuple) (rest tuple))
     (toucan-pk-composite-values* pk-columns tuple)))
+
+(defn- ->column-ident
+  "The pk columns come from [[toucan2.model/primary-keys]], where they are also used to read keys out of result rows; the
+  column name Toucan 2 puts in a query is always a symbol."
+  [k]
+  (symbol (namespace k) (name k)))
 
 (defn- apply-non-composite-toucan-pk [model m pk-column v]
   ;; unwrap the value if we got something like `:toucan/pk [1]`
   (let [v (if (and (sequential? v)
-                   (not (keyword? (first v)))
+                   (not (ident? (first v)))
                    (= (count v) 1))
             (first v)
             v)]
-    (apply-kv-arg model m pk-column v)))
+    (apply-kv-arg model m (->column-ident pk-column) v)))
 
 (defn- apply-composite-toucan-pk [model m pk-columns v]
   (reduce
    (fn [m {:keys [col v]}]
-     (apply-kv-arg model m col v))
+     (apply-kv-arg model m (->column-ident col) v))
    m
    (toucan-pk-composite-values pk-columns v)))
 

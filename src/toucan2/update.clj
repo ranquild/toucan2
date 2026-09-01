@@ -13,7 +13,7 @@
   (s/cat
    :connectable ::query/default-args.connectable
    :modelable   ::query/default-args.modelable
-   :pk          (s/? (complement (some-fn keyword? map?)))
+   :pk          (s/? (complement (some-fn ident? map?)))
    ;; these are treated as CONDITIONS
    :kv-args     ::query/default-args.kv-args
    ;; by default, assuming this resolves to a map query, is treated as a map of conditions.

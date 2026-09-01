@@ -39,8 +39,11 @@
                   (pr-str object)))
   (if-let [changes (not-empty (protocols/changes object))]
     (let [model         (protocols/model object)
-          pk-values     (select-keys object (model/primary-keys (protocols/model object)))
-          rows-affected (update/update! model pk-values changes)]
+          ;; the object's keys are how the row came back from the DB; the query we build out of them is ours, and the
+          ;; identifiers in a query Toucan 2 builds are symbols.
+          ->column      (fn [k] (symbol (namespace k) (name k)))
+          pk-values     (update-keys (select-keys object (model/primary-keys model)) ->column)
+          rows-affected (update/update! model pk-values (update-keys changes ->column))]
       (when-not (pos? rows-affected)
         (throw (ex-info (format "Unable to save object: %s with primary key %s does not exist."
                                 (pr-str model)

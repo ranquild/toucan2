@@ -347,7 +347,7 @@
                             fk-values-set)]
         (log/debugf "Fetching %s with PK columns %s values %s" hydrating-model pk-keys fk-values-set)
         ;; TODO -- not sure if we need to be realizing stuff here?
-        (select/select-pk->fn realize/realize hydrating-model :toucan/pk [:in fk-values-set]))
+        (select/select-pk->fn realize/realize hydrating-model :toucan/pk ['in fk-values-set]))
       (log/debugf "Not hydrating %s because no instances have non-nil FK values" hydrating-model))))
 
 (defn- do-automagic-batched-hydration [dest-key instances pk->fetched-instance]

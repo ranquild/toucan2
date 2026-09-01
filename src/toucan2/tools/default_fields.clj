@@ -13,9 +13,9 @@
 (set! *warn-on-reflection* true)
 
 (s/def ::default-field
-  (s/or :keyword      keyword?
+  (s/or :keyword      ident?
         :fn-and-alias (s/spec (s/cat :fn      ifn?
-                                     :keyword keyword?))))
+                                     :keyword ident?))))
 
 (s/def ::default-fields
   (s/coll-of ::default-field))

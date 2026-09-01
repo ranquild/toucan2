@@ -37,7 +37,7 @@
       (require 'toucan2.select)))
   (if (empty? pks)
     []
-    (let [kv-args     {:toucan/pk [:in pks]}
+    (let [kv-args     {:toucan/pk ['in pks]}
           parsed-args {:columns columns
                        :kv-args kv-args}]
       (pipeline/transduce-query rf :toucan.query-type/select.instances-from-pks model parsed-args {}))))

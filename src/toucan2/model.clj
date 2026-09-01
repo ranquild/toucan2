@@ -60,13 +60,13 @@
   ```clj
   (t2/table-name :models/user)
   ;; =>
-  :user
+  user
   ```
 
   You can write your own implementations for this for models whose table names do not match their `name`.
 
-  This is guaranteed to return a keyword, so it can easily be used directly in Honey SQL queries and the like; if you
-  return something else, the default `:after` method will convert it to a keyword for you."
+  This is guaranteed to return a symbol, so it can easily be used directly in Honey SQL queries and the like; if you
+  return something else, the default `:after` method will convert it to a symbol for you."
   {:arglists            '([model₁])
    :defmethod-arities   #{1}
    :dispatch-value-spec (s/nonconforming ::types/dispatch-value.model)}
@@ -82,18 +82,22 @@
                     {:model model}))))
 
 (m/defmethod table-name :after :default
-  "Always return table names as keywords. This will facilitate using them directly inside Honey SQL, e.g.
+  "Always return table names as symbols -- every identifier Toucan 2 puts in a query is a symbol. This facilitates using
+  them directly inside Honey SQL, e.g.
 
-    {:select [:*], :from [(t2/table-name MyModel)]}"
+    {'select ['*], 'from [(t2/table-name MyModel)]}"
   [a-table-name]
-  (keyword a-table-name))
+  (cond
+    (symbol? a-table-name)  a-table-name
+    (keyword? a-table-name) (symbol (clojure.core/namespace a-table-name) (name a-table-name))
+    :else                   (symbol (str a-table-name))))
 
 (m/defmethod table-name clojure.lang.Named
   "Default implementation for anything that is a `clojure.lang.Named`, such as a keywords or symbols. Use the `name` as
   the table name.
 
   ```clj
-  (t2/table-name :models/user) => :user
+  (t2/table-name :models/user) => user
   ```"
   [model]
   (name model))
@@ -130,8 +134,8 @@
         pks       (if (sequential? pk-or-pks)
                     pk-or-pks
                     [pk-or-pks])]
-    (when-not (every? keyword? pks)
-      (throw (ex-info (format "Bad %s for model %s: should return keyword or sequence of keywords, got %s"
+    (when-not (every? ident? pks)
+      (throw (ex-info (format "Bad %s for model %s: should return keyword/symbol or sequence of them, got %s"
                               `primary-keys
                               (pr-str model)
                               (pr-str pk-or-pks))
