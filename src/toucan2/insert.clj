@@ -41,14 +41,15 @@
 
       :rows
       (assoc parsed :rows (let [[rows-type x] rows-queryable]
-                            (condp = rows-type
-                              :nil               nil
-                              :single-row-map    [x]
-                              :multiple-row-maps x
-                              :kv-pairs          [(into {} (map (juxt :k :v)) x)]
-                              :columns-rows      (let [{:keys [columns rows]} x]
-                                                   (map (partial zipmap columns)
-                                                        rows))))))))
+                            (some->> (condp = rows-type
+                                       :nil               nil
+                                       :single-row-map    [x]
+                                       :multiple-row-maps x
+                                       :kv-pairs          [(into {} (map (juxt :k :v)) x)]
+                                       :columns-rows      (let [{:keys [columns rows]} x]
+                                                            (map (partial zipmap columns)
+                                                                 rows)))
+                                     (mapv query/row-map)))))))
 
 (defn- can-skip-insert? [parsed-args resolved-query]
   (and (empty? (:rows parsed-args))

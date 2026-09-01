@@ -7,6 +7,7 @@
    [methodical.core :as m]
    [toucan2.core :as t2]
    [toucan2.model :as model]
+   [toucan2.query :as query]
    [toucan2.tools.compile :as compile]))
 
 (set! *warn-on-reflection* true)
@@ -64,11 +65,21 @@
          (update (compile/build (t2/insert! ::venues {'name "x"})) 'values vec)))
   (is (= '{update [venues], set {name "x"}, where [= id 1]}
          (compile/build (t2/update! ::venues 1 {'name "x"}))))
-  (testing "row maps are data, so keyword keys are normalized to column symbols rather than rejected"
+  (testing "row maps are data, so their keys can be written either way"
     (is (= '{insert-into [venues], values [{name "x"}]}
            (update (compile/build (t2/insert! ::venues {:name "x"})) 'values vec)))
     (is (= '{update [venues], set {name "x"}, where [= id 1]}
-           (compile/build (t2/update! ::venues 1 {:name "x"})))))
+           (compile/build (t2/update! ::venues 1 {:name "x"}))))))
+
+(deftest ^:parallel row-maps-are-parsed-as-keywords-test
+  (testing "whichever way the caller writes them, rows reach before-insert/before-update and the transforms in the
+           keyword form that rows come back from the database in"
+    (is (= [{:name "x", :id 1}]
+           (:rows (query/parse-args :toucan.query-type/insert.* [::venues {'name "x", 'id 1}]))))
+    (is (= {:name "x"}
+           (:changes (query/parse-args :toucan.query-type/update.* [::venues 1 {'name "x"}]))))))
+
+(deftest ^:parallel delete-test
   (is (= '{delete-from [venues], where [= id 1]}
          (compile/build (t2/delete! ::venues 'id 1)))))
 

@@ -218,6 +218,18 @@
     (toucan-pk-fn-values pk-columns (first tuple) (rest tuple))
     (toucan-pk-composite-values* pk-columns tuple)))
 
+(defn row-map
+  "Normalize the keys of a row map -- an `insert!` row, or the `changes` map of an `update!` -- to keywords.
+
+  A row map is data, and its keys can be written either way; everything downstream of parsing (`before-insert` and
+  `before-update` methods, [[toucan2.tools.transformed]], the instances Toucan 2 hands back) works in the keyword form
+  that rows come back from the database in, so that is the form we settle on here. The column names in the query
+  itself are generated later, and are symbols."
+  [m]
+  (if (some symbol? (keys m))
+    (into {} (map (fn [[k v]] [(if (symbol? k) (keyword (namespace k) (name k)) k) v])) m)
+    m))
+
 (defn- ->column-ident
   "The pk columns come from [[toucan2.model/primary-keys]], where they are also used to read keys out of result rows; the
   column name Toucan 2 puts in a query is always a symbol."
