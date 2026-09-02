@@ -25,6 +25,7 @@
   [query-type unparsed-args]
   (let [parsed (query/parse-args-with-spec query-type ::args unparsed-args)]
     (cond-> parsed
+      (:changes parsed)      (update :changes query/row-map)
       (contains? parsed :pk) (-> (dissoc :pk)
                                  (update :kv-args assoc :toucan/pk (:pk parsed))))))
 
