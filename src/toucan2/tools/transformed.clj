@@ -121,9 +121,11 @@
                       :let                 [xform (get direction->xform direction)]
                       :when                xform
                       ;; a column can be written as a keyword or as a symbol, and Toucan 2 never converts one to the
-                      ;; other, so register the transform under both spellings and let lookup find it either way.
-                      k                    [(keyword (namespace k) (name k))
-                                            (symbol (namespace k) (name k))]]
+                      ;; other, so register `:in` transforms under both spellings and let lookup find it either way.
+                      ;; Result rows only ever have keyword columns, and a row answers `contains?` for either spelling,
+                      ;; so an `:out` transform registered twice would be applied twice; keep it keyword-only.
+                      k                    (cond-> [(keyword (namespace k) (name k))]
+                                             (= direction :in) (conj (symbol (namespace k) (name k))))]
                   [k (fn xform-fn [v]
                        (if-not (some? v)
                          v
