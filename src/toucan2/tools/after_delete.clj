@@ -27,6 +27,16 @@
   (log/tracef "Do after-delete for %s %s" model instance)
   (next-method model instance))
 
+(defn- select-query
+  "The query that selects the rows a `delete!` with `resolved-query` deletes: a Honey SQL `DELETE` map selects from the
+  table it deletes from, keeping its alias (see https://github.com/camsaul/toucan2/issues/203)."
+  [resolved-query]
+  (if (map? resolved-query)
+    (cond-> (dissoc resolved-query :delete)
+      (contains? resolved-query :delete-from) (-> (dissoc :delete-from)
+                                                  (assoc :from [(:delete-from resolved-query)])))
+    resolved-query))
+
 (defn- matching-rows
   "Select and realize the rows matching the args passed to `delete!`, before they are deleted."
   [model parsed-args resolved-query]
@@ -35,7 +45,7 @@
    :toucan.query-type/select.instances
    model
    parsed-args
-   resolved-query))
+   (select-query resolved-query)))
 
 (m/defmethod pipeline/transduce-query [#_query-type     :toucan.query-type/delete.*
                                        #_model          ::after-delete

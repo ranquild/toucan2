@@ -33,6 +33,18 @@
       (is (= [(instance/instance ::venues.after-delete {:id 3, :name "BevMo", :category "store"})]
              (select/select [::venues.after-delete :id :name :category]))))))
 
+(deftest ^:synchronized honeysql-delete-test
+  (testing "a Honey SQL DELETE map selects the rows it deletes from its table, keeping its alias (#203)"
+    (doseq [query [{:delete-from [:venues :v], :where [:= :v.category "bar"]}
+                   {:delete-from :venues, :where [:= :category "bar"]}]]
+      (testing (pr-str query)
+        (test/with-discarded-table-changes :venues
+          (binding [*calls* (atom [])]
+            (is (= 2
+                   (delete/delete! ::venues.after-delete query)))
+            (is (= [1 2]
+                   (sort (map (comp :id first) @*calls*))))))))))
+
 (derive ::venues.after-delete-exception ::test/venues)
 
 (after-delete/define-after-delete ::venues.after-delete-exception
