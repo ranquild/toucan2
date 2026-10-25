@@ -64,12 +64,12 @@
   [:id :name])
 
 (deftest ^:synchronized default-fields-test
-  (testing "after-delete gets every column of the deleted rows, not just the default fields"
+  (testing "after-delete gets the deleted rows as the model's select returns them, with default fields"
     (test/with-discarded-table-changes :venues
       (binding [*calls* (atom [])]
         (is (= 1
                (delete/delete! ::venues.after-delete.default-fields 1)))
-        (is (= [[{:id 1, :name "Tempest", :category "bar"} false]]
+        (is (= [[{:id 1, :name "Tempest"} false]]
                @*calls*))))))
 
 (deftest ^:synchronized compile-test

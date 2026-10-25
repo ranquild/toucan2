@@ -27,10 +27,6 @@
   (log/tracef "Do after-delete for %s %s" model instance)
   (next-method model instance))
 
-;;; The select of the rows a `delete!` is about to delete. Default fields don't apply to it, so after-delete methods get
-;;; every column of the deleted rows.
-(derive ::select-for-after-delete :toucan.query-type/select.instances)
-
 (defn- matching-rows
   "Select and realize the rows matching the args passed to `delete!`, before they are deleted. The rows are collected as
   they are reduced, so a query that is only compiled, e.g. with [[toucan2.tools.compile/compile]], returns none."
@@ -40,7 +36,7 @@
      ((map (fn [row]
              (vswap! rows conj (realize/realize row))))
       (constantly nil))
-     ::select-for-after-delete
+     :toucan.query-type/select.instances
      model
      parsed-args
      (before-delete/-select-query resolved-query))
@@ -77,8 +73,8 @@
 
 (defmacro define-after-delete
   "Define a method that will be called for every row deleted by [[toucan2.delete/delete!]], with the row as it was right
-  before the `DELETE`: a realized instance of the model with all of its columns, as default fields don't apply to it.
-  The results of this after-delete method are ignored, other than being passed to the next method, e.g. the
+  before the `DELETE`: a realized instance of the model, as the model's select returns it, so default fields apply as
+  they do for before-delete. The results of this after-delete method are ignored, other than being passed to the next method, e.g. the
   after-delete method of a parent model. The recursive select, the original delete, and the after-delete methods are
   all done in one transaction, so you can use after-delete to keep other rows up to date in the same transaction, or to
   enforce postconditions and abort deletes when they fail: an exception thrown by an after-delete method rolls back the
