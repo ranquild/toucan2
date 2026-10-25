@@ -2,7 +2,11 @@
   "PostgreSQL integration."
   (:require
    [methodical.core :as m]
+   [toucan2.connection :as conn]
+   [toucan2.jdbc.pipeline :as jdbc.pipeline]
+   [toucan2.jdbc.query :as jdbc.query]
    [toucan2.jdbc.read :as jdbc.read]
+   [toucan2.pipeline :as pipeline]
    [toucan2.util :as u])
   (:import
    (java.sql ResultSet ResultSetMetaData Types)))
@@ -29,3 +33,28 @@
 (m/prefer-method! #'jdbc.read/read-column-thunk
                   [::connection :default Types/TIMESTAMP]
                   [java.sql.Connection :default Types/TIMESTAMP])
+
+(m/defmethod conn/dml-returns-rows? ::connection
+  [_connection]
+  true)
+
+(defn- returning-columns
+  "The column names to return from a DML query that asked for `columns`, or `true` for every column."
+  [columns]
+  (if (and (seq columns) (every? keyword? columns))
+    (mapv name columns)
+    true))
+
+(m/defmethod pipeline/transduce-execute-with-connection [#_conn       ::connection
+                                                         #_query-type ::jdbc.pipeline/DML-queries-returning-instances
+                                                         #_model      :default]
+  "Postgres returns the rows a DML query inserted, updated, or deleted when it is asked for generated keys, as the driver
+  adds `RETURNING` to the query, so read the instances from those rows rather than doing a second SELECT."
+  [rf conn _query-type model sql-args]
+  (let [extra-options {:return-keys (returning-columns (:columns pipeline/*parsed-args*))}
+        result        (jdbc.query/reduce-jdbc-query rf (rf) conn model sql-args extra-options)]
+    (rf result)))
+
+(m/prefer-method! #'pipeline/transduce-execute-with-connection
+                  [::connection ::jdbc.pipeline/DML-queries-returning-instances :default]
+                  [java.sql.Connection ::jdbc.pipeline/DML-queries-returning-instances :default])

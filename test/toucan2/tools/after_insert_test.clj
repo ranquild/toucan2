@@ -3,6 +3,7 @@
    [clojure.string :as str]
    [clojure.test :refer :all]
    [clojure.walk :as walk]
+   [toucan2.execute :as execute]
    [toucan2.insert :as insert]
    [toucan2.instance :as instance]
    [toucan2.protocols :as protocols]
@@ -278,3 +279,13 @@
              (generated-name `(after-insert/define-after-insert :model-2
                                 [~'venue]
                                 ~'venue)))))))
+
+(deftest ^:synchronized query-count-test
+  (testing "Postgres returns the inserted rows, so after-insert needs no SELECT there"
+    (test/with-discarded-table-changes :venues
+      (execute/with-call-count [call-count]
+        (is (= 1
+               (insert/insert! ::venues.after-insert {:name "Hi-Dive", :category "bar"})))
+        (if (= :postgres (test/current-db-type))
+          (is (= 1 (call-count)))
+          (is (< 1 (call-count))))))))

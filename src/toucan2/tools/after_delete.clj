@@ -40,15 +40,26 @@
 (m/defmethod pipeline/transduce-query [#_query-type     :toucan.query-type/delete.*
                                        #_model          ::after-delete
                                        #_resolved-query :default]
-  "Do a recursive SELECT query with the args passed to `delete!`, run the `next-method` to delete the matching rows, and
-  then apply [[after-delete]] to each row that was deleted. This is all done inside of a transaction."
+  "Delete the matching rows, and then apply [[after-delete]] to each row that was deleted, all inside of a transaction.
+  On a connection whose DML queries return the rows they delete, the `DELETE` itself returns them; elsewhere a recursive
+  SELECT query with the args passed to `delete!` fetches them first."
   [rf query-type model parsed-args resolved-query]
-  (conn/with-transaction [_conn nil {:nested-transaction-rule :ignore}]
-    (let [rows   (matching-rows model parsed-args resolved-query)
-          result (next-method rf query-type model parsed-args resolved-query)]
-      (doseq [row rows]
-        (after-delete model row))
-      result)))
+  (conn/with-transaction [connection nil {:nested-transaction-rule :ignore}]
+    (if (and (isa? query-type :toucan.result-type/update-count)
+             (conn/dml-returns-rows? connection))
+      (let [rows (next-method ((map realize/realize) conj)
+                              :toucan.query-type/delete.instances
+                              model
+                              parsed-args
+                              resolved-query)]
+        (doseq [row rows]
+          (after-delete model row))
+        (rf (rf (rf) (count rows))))
+      (let [rows   (matching-rows model parsed-args resolved-query)
+            result (next-method rf query-type model parsed-args resolved-query)]
+        (doseq [row rows]
+          (after-delete model row))
+        result))))
 
 ;;; A model with both before-delete and after-delete runs its before-delete methods first, and the after-delete method
 ;;; above as the `next-method`.

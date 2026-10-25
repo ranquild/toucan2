@@ -273,6 +273,19 @@
 
 ;;; JDBC implementations live in [[toucan2.jdbc.connection]]
 
+(m/defmulti dml-returns-rows?
+  "Whether a DML query run on `connection` can return the rows it inserted, updated, or deleted, as Postgres does with
+  `RETURNING`. When it can, Toucan reads instances for `after-` methods from those rows rather than with another
+  SELECT."
+  {:arglists            '([connection₁])
+   :defmethod-arities   #{1}
+   :dispatch-value-spec ::types/dispatch-value.keyword-or-class}
+  u/dispatch-on-first-arg)
+
+(m/defmethod dml-returns-rows? :default
+  [_connection]
+  false)
+
 (m/defmulti do-with-transaction
   "`options` are options for determining what type of transaction we'll get. See dox for [[with-transaction]] for more
   information."

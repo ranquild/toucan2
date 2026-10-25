@@ -3,6 +3,7 @@
    [clojure.string :as str]
    [clojure.test :refer :all]
    [clojure.walk :as walk]
+   [toucan2.execute :as execute]
    [toucan2.insert :as insert]
    [toucan2.instance :as instance]
    [toucan2.protocols :as protocols]
@@ -202,3 +203,13 @@
         ;; Update with relevant changes:
         (update/update! ::people.bird-lovers row-id {:name "Cam Era"})
         (is (true? @bird-lover-found?))))))
+
+(deftest ^:synchronized query-count-test
+  (testing "Postgres returns the updated rows, so after-update needs no SELECT there"
+    (test/with-discarded-table-changes :venues
+      (execute/with-call-count [call-count]
+        (is (= 1
+               (update/update! ::venues.after-update 1 {:name "Tempest 2"})))
+        (if (= :postgres (test/current-db-type))
+          (is (= 1 (call-count)))
+          (is (< 1 (call-count))))))))

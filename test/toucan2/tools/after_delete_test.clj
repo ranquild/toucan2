@@ -2,6 +2,7 @@
   (:require
    [clojure.test :refer :all]
    [toucan2.delete :as delete]
+   [toucan2.execute :as execute]
    [toucan2.instance :as instance]
    [toucan2.select :as select]
    [toucan2.test :as test]
@@ -81,3 +82,13 @@
            (take 3 (macroexpand-1 `(after-delete/define-after-delete ::venues.after-delete
                                      [~'venue]
                                      nil)))))))
+
+(deftest ^:synchronized query-count-test
+  (testing "Postgres returns the deleted rows, so after-delete needs no SELECT there"
+    (test/with-discarded-table-changes :venues
+      (execute/with-call-count [call-count]
+        (is (= 2
+               (delete/delete! ::venues.after-delete :category "bar")))
+        (if (= :postgres (test/current-db-type))
+          (is (= 1 (call-count)))
+          (is (< 1 (call-count))))))))
