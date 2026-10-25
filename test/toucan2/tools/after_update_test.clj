@@ -205,11 +205,11 @@
         (is (true? @bird-lover-found?))))))
 
 (deftest ^:synchronized query-count-test
-  (testing "Postgres returns the updated rows, so after-update needs no SELECT there"
+  (testing "Postgres and H2 return the updated rows, so after-update needs no SELECT there"
     (test/with-discarded-table-changes :venues
       (execute/with-call-count [call-count]
         (is (= 1
                (update/update! ::venues.after-update 1 {:name "Tempest 2"})))
-        (if (= :postgres (test/current-db-type))
+        (if (#{:postgres :h2} (test/current-db-type))
           (is (= 1 (call-count)))
           (is (< 1 (call-count))))))))

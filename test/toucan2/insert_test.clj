@@ -411,19 +411,23 @@
                    :mariadb        #{:insert-id})
                  (realized-columns))))))))
 
-(deftest ^:synchronized postgres-returning-columns-test
-  (when (= :postgres (test/current-db-type))
-    (testing "Postgres returns only the primary keys when asked for PKs, and every column when asked for instances"
+(deftest ^:synchronized returning-columns-test
+  (when (#{:postgres :h2} (test/current-db-type))
+    (testing "Postgres and H2 return only the primary keys when asked for PKs, and every column when asked for instances"
       (test/with-discarded-table-changes :venues
-        (let [return-keys       (atom [])
+        (let [calls             (atom [])
               reduce-jdbc-query jdbc.query/reduce-jdbc-query]
           (with-redefs [jdbc.query/reduce-jdbc-query (fn [rf init conn model sql-args opts]
-                                                       (swap! return-keys conj (:return-keys opts))
+                                                       (swap! calls conj [(first sql-args) (:return-keys opts)])
                                                        (reduce-jdbc-query rf init conn model sql-args opts))]
             (is (= [4]
                    (insert/insert-returning-pks! ::test/venues {:name "Hi-Dive", :category "bar"})))
             (is (= [{:id 5, :name "Grant & Green", :category "bar"}]
                    (map #(select-keys % [:id :name :category])
                         (insert/insert-returning-instances! ::test/venues {:name "Grant & Green", :category "bar"})))))
-          (is (= [["id"] true]
-                 @return-keys)))))))
+          (let [[[pks-sql pks-keys] [instances-sql instances-keys]] @calls]
+            (case (test/current-db-type)
+              :postgres (is (= [["id"] true] [pks-keys instances-keys]))
+              :h2       (do
+                          (is (re-find #"(?i)^SELECT \"?ID\"? FROM FINAL TABLE \(INSERT " pks-sql))
+                          (is (re-find #"^SELECT \* FROM FINAL TABLE \(INSERT " instances-sql))))))))))

@@ -281,11 +281,11 @@
                                 ~'venue)))))))
 
 (deftest ^:synchronized query-count-test
-  (testing "Postgres returns the inserted rows, so after-insert needs no SELECT there"
+  (testing "Postgres and H2 return the inserted rows, so after-insert needs no SELECT there"
     (test/with-discarded-table-changes :venues
       (execute/with-call-count [call-count]
         (is (= 1
                (insert/insert! ::venues.after-insert {:name "Hi-Dive", :category "bar"})))
-        (if (= :postgres (test/current-db-type))
+        (if (#{:postgres :h2} (test/current-db-type))
           (is (= 1 (call-count)))
           (is (< 1 (call-count))))))))

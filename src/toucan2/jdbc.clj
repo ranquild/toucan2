@@ -19,6 +19,9 @@
 (when (class-for-name "org.postgresql.jdbc.PgConnection")
   (require 'toucan2.jdbc.postgres))
 
+(when (class-for-name "org.h2.jdbc.JdbcConnection")
+  (require 'toucan2.jdbc.h2))
+
 (when (some class-for-name ["org.mariadb.jdbc.Connection"
                            "org.mariadb.jdbc.MariaDbConnection"
                            "com.mysql.cj.MysqlConnection"])

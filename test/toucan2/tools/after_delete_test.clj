@@ -84,11 +84,11 @@
                                      nil)))))))
 
 (deftest ^:synchronized query-count-test
-  (testing "Postgres returns the deleted rows, so after-delete needs no SELECT there"
+  (testing "Postgres and H2 return the deleted rows, so after-delete needs no SELECT there"
     (test/with-discarded-table-changes :venues
       (execute/with-call-count [call-count]
         (is (= 2
                (delete/delete! ::venues.after-delete :category "bar")))
-        (if (= :postgres (test/current-db-type))
+        (if (#{:postgres :h2} (test/current-db-type))
           (is (= 1 (call-count)))
           (is (< 1 (call-count))))))))

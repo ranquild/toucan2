@@ -5,6 +5,7 @@
    [clojure.spec.alpha :as s]
    [methodical.core :as m]
    [toucan2.jdbc.read :as jdbc.read]
+   [toucan2.model :as model]
    [toucan2.test :as test]))
 
 (set! *warn-on-reflection* true)
@@ -20,9 +21,15 @@
   (derive ::track-realized))
 
 (m/defmethod jdbc.read/read-column-thunk :before [#_conn :default #_model ::track-realized #_col-type :default]
-  [_conn _model _rset ^java.sql.ResultSetMetaData rsmeta ^Integer i]
+  [_conn model _rset ^java.sql.ResultSetMetaData rsmeta ^Integer i]
   (when *realized-columns*
-    (let [table-name (some-> (.getTableName rsmeta i) not-empty csk/->kebab-case)
+    ;; H2 reports a data change delta table, e.g. `FINAL TABLE (INSERT ...)`, as the table `INSERT`
+    (let [table-name (some-> (.getTableName rsmeta i)
+                             not-empty
+                             (as-> table (if (#{"INSERT" "UPDATE" "DELETE"} table)
+                                           (name (model/table-name model))
+                                           table))
+                             csk/->kebab-case)
           col-name   (csk/->kebab-case (.getColumnName rsmeta i))]
       (swap! *realized-columns* conj (keyword table-name col-name))))
   i)
