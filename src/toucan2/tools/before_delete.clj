@@ -28,17 +28,34 @@
 
 (defn- select-query
   "The query that selects the rows a `delete!` with `resolved-query` deletes: a Honey SQL `DELETE` map selects from the
-  table it deletes from, keeping its alias (see https://github.com/camsaul/toucan2/issues/203)."
+  table it deletes from, keeping its alias (see https://github.com/camsaul/toucan2/issues/203). Throws for raw SQL and
+  for maps with other clauses, e.g. `:join` or `:limit`, as the select can't be relied on to match the deleted rows."
   [resolved-query]
-  (if (map? resolved-query)
-    (cond-> (dissoc resolved-query :delete)
-      (contains? resolved-query :delete-from) (-> (dissoc :delete-from)
-                                                  (assoc :from [(:delete-from resolved-query)])))
-    resolved-query))
+  (let [unsupported (fn [reason]
+                      (throw (ex-info (str "Can't select the rows this delete deletes, which is needed to call their"
+                                           " before-delete and after-delete methods: " reason ". To skip them, delete"
+                                           " from the model's table name instead.")
+                                      {:query resolved-query})))]
+    (cond
+      (map? resolved-query)
+      (do
+        (when-let [ks (not-empty (remove #{:delete :delete-from :from :where} (keys resolved-query)))]
+          (unsupported (str "unsupported clauses " (vec ks))))
+        (when (next (:from resolved-query))
+          (unsupported "more than one table in :from"))
+        (cond-> (dissoc resolved-query :delete)
+          (contains? resolved-query :delete-from) (-> (dissoc :delete-from)
+                                                      (assoc :from [(:delete-from resolved-query)]))))
+
+      (or (string? resolved-query) (sequential? resolved-query))
+      (unsupported "raw SQL")
+
+      :else
+      resolved-query)))
 
 (defn ^:no-doc -do-for-matching-rows!
-  "Select the rows a `delete!` with `parsed-args` and `resolved-query` deletes, and call `f` on each of them. A query that
-  is only compiled, e.g. with [[toucan2.tools.compile/compile]], calls `f` on none. Used by before-delete and
+  "Select the rows a `delete!` with `parsed-args` and `resolved-query` deletes, and call `f` on each of them. A query
+  that is only compiled, e.g. with [[toucan2.tools.compile/compile]], calls `f` on none. Used by before-delete and
   after-delete; don't call this directly."
   [f model parsed-args resolved-query]
   (pipeline/transduce-query

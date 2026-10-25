@@ -58,6 +58,25 @@
             (is (= [[:before 1] [:before 2] [:after 1] [:after 2]]
                    (sort-by (juxt (comp {:before 0, :after 1} first) second) @*calls*)))))))))
 
+(deftest ^:synchronized unsupported-delete-test
+  (testing "a delete whose rows can't be selected first throws before calling any method or deleting anything"
+    (doseq [query ["DELETE FROM venues WHERE category = 'bar'"
+                   ["DELETE FROM venues WHERE category = ?" "bar"]
+                   {:delete-from :venues, :where [:= :category "bar"], :order-by [[:id :desc]], :limit 1}
+                   {:delete-from [:venues :v], :join [[:people :p] [:= :p.id :v.id]], :where [:= :v.category "bar"]}
+                   {:delete [:v], :from [[:venues :v] [:people :p]], :where [:= :p.id :v.id]}]]
+      (testing (pr-str query)
+        (test/with-discarded-table-changes :venues
+          (binding [*calls* (atom [])]
+            (is (thrown-with-msg?
+                 clojure.lang.ExceptionInfo
+                 #"Can't select the rows this delete deletes"
+                 (delete/delete! ::venues.before-and-after-delete query)))
+            (is (= []
+                   @*calls*))
+            (is (= [1 2 3]
+                   (select/select-fn-vec :id ::test/venues {:order-by [[:id :asc]]})))))))))
+
 (derive ::venues.after-delete.default-fields ::venues.after-delete)
 
 (default-fields/define-default-fields ::venues.after-delete.default-fields
