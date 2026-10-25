@@ -64,21 +64,17 @@
 
 (defmacro define-after-delete
   "Define a method that will be called for every row deleted by [[toucan2.delete/delete!]], with the row as it was right
-  before the `DELETE`: a realized instance of the model, as the model's select returns it, so default fields apply as
-  they do for before-delete. The results of this after-delete method are ignored, other than being passed to the next method, e.g. the
-  after-delete method of a parent model. The recursive select, the original delete, and the after-delete methods are
-  all done in one transaction, so you can use after-delete to keep other rows up to date in the same transaction, or to
-  enforce postconditions and abort deletes when they fail: an exception thrown by an after-delete method rolls back the
-  delete, unless code inside a transaction that was already open catches it, in which case that transaction keeps the
-  `DELETE`.
+  before the `DELETE`, as the model's select returns it, so default fields and after-select apply. Its result is
+  ignored, other than being passed to the next method, e.g. a parent model's after-delete. The select, the delete, and
+  the after-delete methods are done in one transaction, so an after-delete method can keep other rows up to date, or
+  throw to roll back the delete. If code inside a transaction that was already open catches the exception, though,
+  that transaction keeps the `DELETE`.
 
-  After-delete is implemented by first selecting all the rows matching the [[toucan2.delete/delete!]] conditions, then
-  running the `DELETE`, and then calling the [[after-delete]] method this macro defines on each of those rows. Unlike
-  [[toucan2.tools.before-delete/define-before-delete]], which handles the rows one at a time, after-delete has to hold
-  every matching row in memory until the `DELETE` is done, so defining an after-delete method can be quite expensive
-  for deletes of many rows! Be sure you *really* need after-delete behavior before opting in to it. A model with
-  before-delete methods as well runs them first, and after-delete then selects the rows again, so its methods see any
-  changes the before-delete methods made. Deletes with raw SQL aren't supported, as their rows can't be selected first.
+  After-delete selects the rows matching the `delete!` conditions before the `DELETE` and holds all of them in memory
+  until it is done, so it can be quite expensive for deletes of many rows! Be sure you *really* need after-delete
+  behavior before opting in to it. A model's before-delete methods run first, and after-delete then selects the rows
+  again, so it sees their changes. Deletes with raw SQL, or with Honey SQL clauses other than `:delete`,
+  `:delete-from`, `:from`, and `:where`, throw, as their rows can't be selected first.
 
   To skip after-delete behavior, you can always use the model's raw table name directly, e.g.
 

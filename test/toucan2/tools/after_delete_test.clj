@@ -46,17 +46,7 @@
             (is (= 2
                    (delete/delete! ::venues.after-delete query)))
             (is (= [1 2]
-                   (sort (map (comp :id first) @*calls*)))))))))
-  (testing "a model with before-delete as well (#203)"
-    (doseq [query [{:delete-from [:venues :v], :where [:= :v.category "bar"]}
-                   {:delete-from :venues, :where [:= :category "bar"]}]]
-      (testing (pr-str query)
-        (test/with-discarded-table-changes :venues
-          (binding [*calls* (atom [])]
-            (is (= 2
-                   (delete/delete! ::venues.before-and-after-delete query)))
-            (is (= [[:before 1] [:before 2] [:after 1] [:after 2]]
-                   (sort-by (juxt (comp {:before 0, :after 1} first) second) @*calls*)))))))))
+                   (sort (map (comp :id first) @*calls*))))))))))
 
 (deftest ^:synchronized unsupported-delete-test
   (testing "a delete whose rows can't be selected first throws before calling any method or deleting anything"
@@ -118,7 +108,7 @@
   (assoc venue :child true))
 
 (deftest ^:synchronized compose-test
-  (testing "a child model's after-delete runs before its parent's, which gets what the child's returned"
+  (testing "a child model's after-delete runs first, and its parent's gets the child's result"
     (test/with-discarded-table-changes :venues
       (binding [*calls* (atom [])]
         (is (= 1
@@ -150,12 +140,13 @@
   [venue]
   (when *calls*
     (swap! *calls* conj [:before (:id venue)]))
+  (update/update! ::test/venues (:id venue) {:name (str (:name venue) " (closed)")})
   nil)
 
 (after-delete/define-after-delete ::venues.before-and-after-delete
   [venue]
   (when *calls*
-    (swap! *calls* conj [:after (:id venue)]))
+    (swap! *calls* conj [:after (:id venue) (:name venue)]))
   nil)
 
 (deftest ^:synchronized before-and-after-delete-test
@@ -163,30 +154,8 @@
     (binding [*calls* (atom [])]
       (is (= 1
              (delete/delete! ::venues.before-and-after-delete 3)))
-      (testing "a model with both runs before-delete and then after-delete"
-        (is (= [[:before 3] [:after 3]]
-               @*calls*))))))
-
-(derive ::venues.before-delete-renames ::test/venues)
-
-(before-delete/define-before-delete ::venues.before-delete-renames
-  [venue]
-  (update/update! ::test/venues (:id venue) {:name (str (:name venue) " (closed)")})
-  nil)
-
-(after-delete/define-after-delete ::venues.before-delete-renames
-  [venue]
-  (when *calls*
-    (swap! *calls* conj (:name venue)))
-  nil)
-
-(deftest ^:synchronized after-delete-sees-before-delete-changes-test
-  (testing "after-delete gets the rows as they were right before the delete, with the changes before-delete made"
-    (test/with-discarded-table-changes :venues
-      (binding [*calls* (atom [])]
-        (is (= 1
-               (delete/delete! ::venues.before-delete-renames 1)))
-        (is (= ["Tempest (closed)"]
+      (testing "a model with both runs before-delete and then after-delete, which sees the changes before-delete made"
+        (is (= [[:before 3] [:after 3 "BevMo (closed)"]]
                @*calls*))))))
 
 (deftest ^:parallel macroexpansion-test

@@ -101,7 +101,8 @@
   expensive! For example, a `delete!` operation that deletes a million rows would normally be a single database call;
   with before-delete in place, it would have to fetch and transduce all million rows and apply [[before-delete]] to each
   of them *before* even getting to the `DELETE` operation! So be sure you *really* need before-delete behavior before
-  opting in to it.
+  opting in to it. Deletes with raw SQL, or with Honey SQL clauses other than `:delete`, `:delete-from`, `:from`, and
+  `:where`, throw, as their rows can't be selected first.
 
   To skip before-delete behavior, you can always use the model's raw table name directly, e.g.
 
