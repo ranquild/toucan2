@@ -98,6 +98,14 @@
       (log/debugf "Not adding default fields transducer since query type is done for the purposes of before-update")
       (next-method query-type model))
 
+    ;; nor for the select done by after-delete, so its methods get every column of the deleted rows.
+    ;;
+    ;; See [[toucan2.tools.after-delete-test/default-fields-test]]
+    (isa? query-type :toucan2.tools.after-delete/select-for-after-delete)
+    (do
+      (log/debugf "Not adding default fields transducer since query type is done for the purposes of after-delete")
+      (next-method query-type model))
+
     :else
     (do
       (log/debugf "adding transducer to return default fields for %s" model)
