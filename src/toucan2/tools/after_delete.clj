@@ -5,7 +5,6 @@
    [toucan2.connection :as conn]
    [toucan2.log :as log]
    [toucan2.pipeline :as pipeline]
-   [toucan2.realize :as realize]
    [toucan2.tools.before-delete :as before-delete]
    [toucan2.types :as types]
    [toucan2.util :as u]))
@@ -28,18 +27,10 @@
   (next-method model instance))
 
 (defn- matching-rows
-  "Select and realize the rows matching the args passed to `delete!`, before they are deleted. The rows are collected as
-  they are reduced, so a query that is only compiled, e.g. with [[toucan2.tools.compile/compile]], returns none."
+  "Select and realize the rows matching the args passed to `delete!`, before they are deleted."
   [model parsed-args resolved-query]
   (let [rows (volatile! [])]
-    (pipeline/transduce-query
-     ((map (fn [row]
-             (vswap! rows conj (realize/realize row))))
-      (constantly nil))
-     :toucan.query-type/select.instances
-     model
-     parsed-args
-     (before-delete/-select-query resolved-query))
+    (before-delete/-do-for-matching-rows! #(vswap! rows conj %) model parsed-args resolved-query)
     @rows))
 
 (m/defmethod pipeline/transduce-query [#_query-type     :toucan.query-type/delete.*

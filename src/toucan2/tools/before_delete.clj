@@ -26,7 +26,7 @@
   (log/tracef "Do before-delete for %s %s" model instance)
   (next-method model instance))
 
-(defn ^:no-doc -select-query
+(defn- select-query
   "The query that selects the rows a `delete!` with `resolved-query` deletes: a Honey SQL `DELETE` map selects from the
   table it deletes from, keeping its alias (see https://github.com/camsaul/toucan2/issues/203)."
   [resolved-query]
@@ -36,19 +36,21 @@
                                                   (assoc :from [(:delete-from resolved-query)])))
     resolved-query))
 
-(defn- do-before-delete-for-matching-rows!
-  "Select and transduce the matching rows and run their [[before-delete]] methods."
-  [model parsed-args resolved-query]
+(defn ^:no-doc -do-for-matching-rows!
+  "Select the rows a `delete!` with `parsed-args` and `resolved-query` deletes, and call `f` on each of them. A query that
+  is only compiled, e.g. with [[toucan2.tools.compile/compile]], calls `f` on none. Used by before-delete and
+  after-delete; don't call this directly."
+  [f model parsed-args resolved-query]
   (pipeline/transduce-query
    ((map (fn [row]
            ;; this is another case where we don't NEED to fully realize the rows but it's a big hassle for people
            ;; to use this if we don't. Let's be nice and realize things for people.
-           (before-delete model (realize/realize row))))
+           (f (realize/realize row))))
     (constantly nil))
    :toucan.query-type/select.instances
    model
    parsed-args
-   (-select-query resolved-query)))
+   (select-query resolved-query)))
 
 (m/defmethod pipeline/transduce-query [#_query-type     :toucan.query-type/delete.*
                                        #_model          ::before-delete
@@ -57,7 +59,7 @@
   the `next-method`. This is all done inside of a transaction."
   [rf query-type model parsed-args resolved-query]
   (conn/with-transaction [_conn nil {:nested-transaction-rule :ignore}]
-    (do-before-delete-for-matching-rows! model parsed-args resolved-query)
+    (-do-for-matching-rows! #(before-delete model %) model parsed-args resolved-query)
     (next-method rf query-type model parsed-args resolved-query)))
 
 (defn ^:no-doc -before-delete-impl
