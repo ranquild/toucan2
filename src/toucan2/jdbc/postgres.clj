@@ -6,6 +6,7 @@
    [toucan2.jdbc.pipeline :as jdbc.pipeline]
    [toucan2.jdbc.query :as jdbc.query]
    [toucan2.jdbc.read :as jdbc.read]
+   [toucan2.model :as model]
    [toucan2.pipeline :as pipeline]
    [toucan2.util :as u])
   (:import
@@ -58,3 +59,18 @@
 (m/prefer-method! #'pipeline/transduce-execute-with-connection
                   [::connection ::jdbc.pipeline/DML-queries-returning-instances :default]
                   [java.sql.Connection ::jdbc.pipeline/DML-queries-returning-instances :default])
+
+(m/defmethod pipeline/transduce-execute-with-connection [#_conn       ::connection
+                                                         #_query-type :toucan.result-type/pks
+                                                         #_model      :default]
+  "Ask Postgres for only the primary key columns of the rows a DML query wrote, as the driver otherwise adds `RETURNING *`
+  for generated keys and sends back every column."
+  [rf conn _query-type model sql-args]
+  (let [rf            ((map (model/select-pks-fn model)) rf)
+        extra-options {:return-keys (mapv name (model/primary-keys model))}
+        result        (jdbc.query/reduce-jdbc-query rf (rf) conn model sql-args extra-options)]
+    (rf result)))
+
+(m/prefer-method! #'pipeline/transduce-execute-with-connection
+                  [::connection :toucan.result-type/pks :default]
+                  [java.sql.Connection :toucan.result-type/pks :default])

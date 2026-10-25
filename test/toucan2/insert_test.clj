@@ -6,6 +6,7 @@
    [toucan2.execute :as execute]
    [toucan2.insert :as insert]
    [toucan2.instance :as instance]
+   [toucan2.jdbc.query :as jdbc.query]
    [toucan2.model :as model]
    [toucan2.pipeline :as pipeline]
    [toucan2.query :as query]
@@ -409,3 +410,20 @@
                    (:postgres :h2) #{:venues/id}
                    :mariadb        #{:insert-id})
                  (realized-columns))))))))
+
+(deftest ^:synchronized postgres-returning-columns-test
+  (when (= :postgres (test/current-db-type))
+    (testing "Postgres returns only the primary keys when asked for PKs, and every column when asked for instances"
+      (test/with-discarded-table-changes :venues
+        (let [return-keys       (atom [])
+              reduce-jdbc-query jdbc.query/reduce-jdbc-query]
+          (with-redefs [jdbc.query/reduce-jdbc-query (fn [rf init conn model sql-args opts]
+                                                       (swap! return-keys conj (:return-keys opts))
+                                                       (reduce-jdbc-query rf init conn model sql-args opts))]
+            (is (= [4]
+                   (insert/insert-returning-pks! ::test/venues {:name "Hi-Dive", :category "bar"})))
+            (is (= [{:id 5, :name "Grant & Green", :category "bar"}]
+                   (map #(select-keys % [:id :name :category])
+                        (insert/insert-returning-instances! ::test/venues {:name "Grant & Green", :category "bar"})))))
+          (is (= [["id"] true]
+                 @return-keys)))))))
